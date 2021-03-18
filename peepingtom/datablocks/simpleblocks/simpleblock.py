@@ -1,3 +1,4 @@
+from dask import delayed
 from xarray import DataArray
 
 from ..datablock import DataBlock
@@ -13,12 +14,16 @@ class SimpleBlock(DataBlock):
 
     Calling __getitem__ on a SimpleBlock will call __getitem__ on its data property and return a view
     """
-    def __init__(self, data=(), **kwargs):
+
+    def __init__(self, data=(), reader_function=None, **kwargs):
         super().__init__(**kwargs)
+        self.reader_function = reader_function
         self.data = data
 
     @property
     def data(self):
+        if callable(self._data):
+            return self._data.compute()
         return self._data
 
     @data.setter
@@ -27,6 +32,8 @@ class SimpleBlock(DataBlock):
             self._data = data.data
         elif isinstance(data, DataArray):
             self._data = data
+        elif callable(self._reader_function):
+            self._data = self._reader_function(data)
         else:
             self._data = self._data_setter(data)
         self.update()
@@ -36,6 +43,17 @@ class SimpleBlock(DataBlock):
         takes raw data and returns it properly formatted to the SimpleBlock subclass specification.
         """
         raise NotImplementedError('SimpleBlocks must implement this method')
+
+    @property
+    def reader_function(self):
+        return self._reader_function
+
+    @reader_function.setter
+    def reader_function(self, function):
+        if function is None:
+            self._reader_function = function
+        else:
+            self._reader_function = delayed(function)
 
     def __setitem__(self, key, value):
         self.data[key] = value
